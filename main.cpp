@@ -6,7 +6,7 @@
 
 int main(int argc, char *argv[])
 {
-    Q_INIT_RESOURCE(dataanalyzer);
+    //Q_INIT_RESOURCE(dataanalyzer); //innecesario ???????? **************
 
     QApplication app(argc, argv);
     app.setOrganizationName("UNLZ");

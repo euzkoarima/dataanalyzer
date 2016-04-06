@@ -1,5 +1,9 @@
 <RCC>
     <qresource prefix="/">
         <file>translations/DataAnalyzer_es.qm</file>
+        <file>icons/MathematicalPlot.svg</file>
+        <file>icons/spreadsheet.svg</file>
+        <file>icons/information.svg</file>
+        <file>icons/spreadsheet-cyan.svg</file>
     </qresource>
 </RCC>
