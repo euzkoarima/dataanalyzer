@@ -41,9 +41,23 @@ DataAnalyzer::DataAnalyzer(QWidget *parent) :
     connect(ui->actionGraph, &QAction::triggered,
             [=]() {ui->stackedWidget->setCurrentIndex(2);});
 
+    //BUG workaround por menubar action shortcuts not working (5.7 & 5.8 need it, 5.6 works ok)
+    //http://stackoverflow.com/questions/23916623/qt5-doesnt-recognised-shortcuts-unless-actions-are-added-to-a-toolbar
+    //https://bugs.launchpad.net/ubuntu/+source/appmenu-qt5/+bug/1313248
+    this->addAction(ui->actionOpen);
+    this->addAction(ui->actionQuit);
     m_model = new TestModel(nullptr);//TODO: ??????????? y si pongo como parent a tableView ????????????????
     connect(this, &DataAnalyzer::testChange, m_model, &TestModel::testChange);//WARNING: esta bien que emita datanalyzer o debería emitir test??
     ui->tableView->setModel(m_model);
+    //m_fixedTicker = QSharedPointer<QCPAxisTickerFixed>::create();
+    //m_ticker = QSharedPointer<QCPAxisTicker>::create();
+    m_timeTicker = QSharedPointer<QCPAxisTickerTime>::create();
+    m_timeTicker->setTimeFormat("%m:%s.%z"); //("mm:ss.zzz"
+    m_timeTicker->setFieldWidth(QCPAxisTickerTime::TimeUnit::tuMinutes,2);
+    m_timeTicker->setFieldWidth(QCPAxisTickerTime::TimeUnit::tuSeconds,2);
+    m_timeTicker->setFieldWidth(QCPAxisTickerTime::TimeUnit::tuMilliseconds,3);
+    //ui->qcpGraph->xAxis->setAutoTickStep(true); //TODO no se el equivalente nuevo
+    m_ticker = ui->qcpGraph->xAxis->ticker();
     initializePlot();
     makePlot();
 }
@@ -126,12 +140,12 @@ void DataAnalyzer::mouseWheel(QWheelEvent *event)
 void DataAnalyzer::axisDoubleClick(QCPAxis *axis, QCPAxis::SelectablePart part)
 {
     if (part == QCPAxis::spTickLabels && axis == ui->qcpGraph->xAxis) {
-        if (m_activeTest && ui->qcpGraph->xAxis->tickLabelType() == QCPAxis::LabelType::ltNumber) {
-            ui->qcpGraph->xAxis->setTickLabelType(QCPAxis::LabelType::ltDateTime);
-            ui->qcpGraph->xAxis->setDateTimeFormat("mm:ss.zzz");
-        } else {    //QCPAxis::LabelType::ltDateTime
-            ui->qcpGraph->xAxis->setTickLabelType(QCPAxis::LabelType::ltNumber);
-            ui->qcpGraph->xAxis->setNumberFormat("g");
+        if (m_activeTest &&  ui->qcpGraph->xAxis->ticker() == m_ticker) {
+            ui->qcpGraph->xAxis->setTicker(m_timeTicker);
+            //ui->qcpGraph->xAxis->setDateTimeFormat("mm:ss.zzz");
+        } else {    //QCPAxis::LabelType::ltDateTime*
+            ui->qcpGraph->xAxis->setTicker(m_ticker);
+            //ui->qcpGraph->xAxis->setNumberFormat("g");
         }
         ui->qcpGraph->replot();
     }
@@ -178,7 +192,15 @@ void DataAnalyzer::selectionChanged()
         QCPPlottableLegendItem *item = ui->qcpGraph->legend->itemWithPlottable(graph);
         if (item->selected() || graph->selected()) {
             item->setSelected(true);
-            graph->setSelected(true);
+            //graph->setSelected(true);
+            //quizas: si no se empty usar enforceType
+            QCPDataSelection datasel = graph->selection();
+            if (datasel.isEmpty()) {
+                QCPDataRange dr(0, graph->dataCount());
+                datasel += dr;
+                //datasel.enforceType(QCP::SelectionType::stWhole);
+                graph->setSelection(datasel);
+            }
         }
     }
 }
@@ -241,7 +263,7 @@ void DataAnalyzer::writeSettings()
 void DataAnalyzer::initializePlot()
 {
     ui->qcpGraph->plotLayout()->insertRow(0);
-    ui->qcpGraph->plotLayout()->addElement(0,0,new QCPPlotTitle(ui->qcpGraph, tr("No Data")));
+    ui->qcpGraph->plotLayout()->addElement(0,0,new QCPTextElement(ui->qcpGraph, tr("No Data")));
     // Use sublayout and dummyElement to fit legend properly
     QCPLayoutGrid *sublayout = new QCPLayoutGrid;
     QCPLayoutElement *dummyElement = new QCPLayoutElement;
@@ -268,7 +290,7 @@ void DataAnalyzer::initializePlot()
 void DataAnalyzer::makePlot()
 {
     ui->qcpGraph->clearGraphs();
-    QCPPlotTitle *title = dynamic_cast<QCPPlotTitle *>(ui->qcpGraph->plotLayout()->element(0, 0));
+    QCPTextElement *title = dynamic_cast<QCPTextElement*>(ui->qcpGraph->plotLayout()->element(0, 0));
     ui->qcpGraph->deselectAll();
     ui->qcpGraph->xAxis->setUpperEnding(QCPLineEnding::esLineArrow);
     ui->qcpGraph->yAxis->setUpperEnding(QCPLineEnding::esLineArrow);
@@ -285,12 +307,13 @@ void DataAnalyzer::makePlot()
         ui->qcpGraph->legend->clearItems(); //legend no needed if there's no data
         ui->qcpGraph->legend->setVisible(false);
         ui->qcpGraph->setInteractions(0);
-        ui->qcpGraph->xAxis->setTickLabelType(QCPAxis::LabelType::ltNumber);
+        //ui->qcpGraph->xAxis->setTickLabelType(QCPAxis::LabelType::ltNumber);
         ui->qcpGraph->xAxis->setNumberFormat("g");
-        ui->qcpGraph->xAxis->setAutoTickStep(false);// just cosmetic
-        ui->qcpGraph->xAxis->setTickStep(0.20);
-        ui->qcpGraph->yAxis->setAutoTickStep(false);
-        ui->qcpGraph->yAxis->setTickStep(0.25);
+        //ui->qcpGraph->xAxis->setAutoTickStep(false);// just cosmetic
+        //ui->qcpGraph->xAxis->setTickStep(0.20);
+        ui->qcpGraph->xAxis->setTicker(m_ticker);
+        //ui->qcpGraph->yAxis->setAutoTickStep(false);
+        //ui->qcpGraph->yAxis->setTickStep(0.25);
         ui->qcpGraph->setContextMenuPolicy(Qt::NoContextMenu);  // setup policy for context menu popup:
         ui->qcpGraph->replot();
         return;
@@ -309,10 +332,11 @@ void DataAnalyzer::makePlot()
     }
     ui->qcpGraph->xAxis->rescale();
     ui->qcpGraph->yAxis->rescale();
-    ui->qcpGraph->xAxis->setAutoTickStep(true); //was disabled when no data
-    ui->qcpGraph->yAxis->setAutoTickStep(true);
-    ui->qcpGraph->xAxis->setTickLabelType(QCPAxis::LabelType::ltDateTime);
-    ui->qcpGraph->xAxis->setDateTimeFormat("mm:ss.zzz");
+    //ui->qcpGraph->xAxis->setAutoTickStep(true); //was disabled when no data
+    //ui->qcpGraph->yAxis->setAutoTickStep(true);
+    //ui->qcpGraph->xAxis->setTickLabelType(QCPAxis::LabelType::ltDateTime);
+    //ui->qcpGraph->xAxis->setDateTimeFormat("mm:ss.zzz");
+    ui->qcpGraph->xAxis->setTicker(m_timeTicker);
     ui->qcpGraph->legend->setVisible(true); //was disabled when no data
     // Allow user to drag axis ranges with mouse, zoom with mouse wheel and select graphs by clicking:
     ui->qcpGraph->setInteractions(QCP::iRangeDrag | QCP::iRangeZoom | QCP::iSelectAxes

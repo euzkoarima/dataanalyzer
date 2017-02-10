@@ -40,6 +40,8 @@ private:
     Ui::DataAnalyzer *ui;
     Test *m_activeTest;
     TestModel *m_model;
+    QSharedPointer<QCPAxisTicker> m_ticker;
+    QSharedPointer<QCPAxisTickerTime> m_timeTicker;
     void readSettings();
     void writeSettings();
     void initializePlot();
